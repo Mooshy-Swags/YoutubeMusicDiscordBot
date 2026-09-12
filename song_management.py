@@ -1,3 +1,4 @@
+import asyncio
 import music
 import os
 
@@ -9,18 +10,22 @@ songs_played = 0
 MAX_CACHE = 5
 MAX_DISPLAY = 10
 
-def add(query):
+async def add(query):
     global songs_queue, id_queue
     try:
         if "playlist?" in query:
-            songs, ids = music.get_playlist(query)
+            songs, ids = await asyncio.to_thread(music.get_playlist, query)
             songs_queue = [*songs_queue, *songs]
             id_queue = [*id_queue, *ids]
             return {"playlist": True}
-    
-        song, id = music.get_song(query, from_url=("youtube.com" in query or "youtu.be" in query))
+
+        song, song_id = await asyncio.to_thread(
+            music.get_song,
+            query,
+            ("youtube.com" in query or "youtu.be" in query),
+        )
         songs_queue.append(song)
-        id_queue.append(id)
+        id_queue.append(song_id)
         return {**song, "playlist": False}
     except:
         return None

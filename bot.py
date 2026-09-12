@@ -87,7 +87,7 @@ async def play(interaction: discord.Interaction, query: str):
     if vc is None:
         vc = await voice_channel.connect()
     await interaction.channel.send(f" Currently looking for `{query}`")
-    song_info = song_management.add(query)
+    song_info = await song_management.add(query)
     
     if song_info is None:
         await interaction.channel.send("The song or playlist was not found or hidden. Please make sure you entered the correct URL.")
