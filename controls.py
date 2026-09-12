@@ -36,9 +36,11 @@ class ControlView(discord.ui.View):
             return
         if vc.is_paused():
             vc.resume()
+            player.mark_resume()
             button.emoji = "⏸"
         elif vc.is_playing():
             vc.pause()
+            player.mark_pause()
             button.emoji = "▶"
         else:
             await interaction.response.send_message(

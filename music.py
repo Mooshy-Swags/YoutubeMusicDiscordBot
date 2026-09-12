@@ -35,11 +35,13 @@ def get_song(song, from_url=False):
         song_id = info.get("id")
         song_name = info.get("title")
         song_artist = info.get("channel") or info.get("uploader")
+        song_duration = info.get("duration")
 
     return_song = {
         "song_id": song_id,
         "song_name": song_name,
-        "song_artist": song_artist
+        "song_artist": song_artist,
+        "song_duration": song_duration,
     }
     return return_song, song_id
 
@@ -67,6 +69,7 @@ def get_playlist(playlist_url):
             "song_id": e.get("id"),
             "song_name": e.get("title"),
             "song_artist": e.get("channel") or e.get("uploader"),
+            "song_duration": e.get("duration"),
         })
         song_ids.append(e.get("id"))
     return playlist, song_ids

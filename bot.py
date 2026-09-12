@@ -127,6 +127,7 @@ async def pause(interaction: discord.Interaction):
         return
     if vc.is_playing():
         vc.pause()
+        player.mark_pause()
         await interaction.response.send_message("Paused music.")
     else:
         await interaction.response.send_message("Already paused or nothing playing.")
@@ -139,6 +140,7 @@ async def resume(interaction: discord.Interaction):
         return
     if vc.is_paused():
         vc.resume()
+        player.mark_resume()
         await interaction.response.send_message("Resumed music.")
     else:
         await interaction.response.send_message("Nothing was paused. No music in queue.")
