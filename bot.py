@@ -109,31 +109,13 @@ async def play(interaction: discord.Interaction, query: str):
 
 @bot.tree.command(name="queue")
 async def queue(interaction: discord.Interaction):
+    player.channel = interaction.channel
     queue_list = song_management.get_queue()
     if not queue_list:
         await interaction.response.send_message("The queue is empty.")
         return
 
-    current = song_management.current_song
-    played = song_management.songs_played
-    lines = []
-    for i, song in enumerate(queue_list):
-        marker = "▶ " if i == current else "  "
-        name = str(song.get("song_name"))[:60]
-        artist = str(song.get("song_artist"))[:40]
-        lines.append(f"{marker}`{played + i + 1}.` **{name}** — {artist}")
-
-    if len(song_management.songs_queue) > len(queue_list):
-        lines.append("...")
-
-    embed = discord.Embed(
-        title="Queue",
-        description="\n".join(lines),
-        color=discord.Color.blurple(),
-    )
-    await interaction.response.send_message(embed=embed)
-
-    player.channel = interaction.channel
+    await interaction.response.defer()
     await player.refresh_panel()
 
 
