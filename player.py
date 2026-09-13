@@ -15,6 +15,7 @@ seek_target = None
 panel_message = None
 queue_message = None
 queue_page = 0
+refresh_lock = asyncio.Lock()
 
 LOOP_NONE = 0
 LOOP_PLAYLIST = 1
@@ -133,22 +134,36 @@ async def start_playback(vc: discord.VoiceClient):
 
 async def refresh_panel():
     global panel_message, queue_message, queue_page
-    text = build_panel_text()
-    if text is None:
-        return
+    async with refresh_lock:
+        text = build_panel_text()
+        if text is None:
+            return
 
-    pages = song_management.page_count()
-    queue_page = max(0, min(queue_page, pages - 1))
+        pages = song_management.page_count()
+        queue_page = max(0, min(queue_page, pages - 1))
+        embed = build_queue_embed(queue_page)
+        panel_view = ControlView()
+        queue_view = QueueView(queue_page)
 
-    await _delete_message(panel_message)
-    await _delete_message(queue_message)
-    panel_message = queue_message = None
+        if panel_message is not None:
+            try:
+                await panel_message.edit(content=text, view=panel_view)
+            except (discord.NotFound, discord.HTTPException):
+                panel_message = None
+        if queue_message is not None:
+            try:
+                await queue_message.edit(embed=embed, view=queue_view)
+            except (discord.NotFound, discord.HTTPException):
+                queue_message = None
 
-    panel_message = await channel.send(text, view=ControlView())
-    queue_message = await channel.send(
-        embed=build_queue_embed(queue_page),
-        view=QueueView(queue_page),
-    )
+        if panel_message is not None and queue_message is not None:
+            return
+
+        await _delete_message(panel_message)
+        await _delete_message(queue_message)
+        panel_message = queue_message = None
+        panel_message = await channel.send(text, view=panel_view)
+        queue_message = await channel.send(embed=embed, view=queue_view)
 
 async def _play(vc, song):
     global progress_task
@@ -211,4 +226,22 @@ async def _maybe_next(vc):
         await _delete_message(queue_message)
         panel_message = queue_message = None
         await channel.send("No more songs in queue.")
+
+async def on_songs_flushed(announcements, failures):
+    if channel is not None and (announcements or failures):
+        for name, artist, number in announcements:
+            await channel.send(f"Queued `{name}` by `{artist}` — now #{number} in the queue.")
+        for name in failures:
+            await channel.send(f"Couldn't download `{name}` — skipped.")
+    if channel is None:
+        return
+    vc = channel.guild.voice_client
+    if vc is None:
+        return
+    if vc.is_playing() or vc.is_paused():
+        await refresh_panel()
+    else:
+        await start_playback(vc)
+
+song_management.set_flush_hook(on_songs_flushed)
 

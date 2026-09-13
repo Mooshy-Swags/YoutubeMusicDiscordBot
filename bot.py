@@ -80,27 +80,33 @@ async def play(interaction: discord.Interaction, query: str):
         await interaction.response.send_message("You are not in a voice channel. Please join one before queuing a song or playlist.", ephemeral=True)
         return
 
-    await interaction.response.defer(ephemeral=True)
+    player.channel = interaction.channel
+    await interaction.response.send_message(f"Currently looking for `{query}`...")
+    msg = await interaction.original_response()
 
     voice_channel = interaction.user.voice.channel
     vc = interaction.guild.voice_client
     if vc is None:
         vc = await voice_channel.connect()
-    await interaction.channel.send(f" Currently looking for `{query}`")
     song_info = await song_management.add(query)
-    
+
     if song_info is None:
-        await interaction.channel.send("The song or playlist was not found or hidden. Please make sure you entered the correct URL.")
+        await msg.edit(content=f"Couldn't find or access `{query}`.")
         return
 
-
     if song_info.get("playlist"):
-        await interaction.channel.send("Playlist has been added. For detail, please use: /queue")
+        playlist_name = song_info.get("playlist_name")
+        count = song_info.get("count", 0)
+        if playlist_name:
+            await msg.edit(content=f"Found playlist `{playlist_name}` ({count} songs). It's been added to the queue.")
+        else:
+            await msg.edit(content=f"Found playlist ({count} songs). It's been added to the queue.")
 
     else:
-        await interaction.channel.send(f"Queued `{song_info.get("song_name")}` by `{song_info.get("song_artist")}`")
+        name = song_info.get("song_name")
+        artist = song_info.get("song_artist")
+        await msg.edit(content=f"Found `{name}` by `{artist}`")
 
-    player.channel = interaction.channel
     if not (vc.is_playing() or vc.is_paused()):
         await player.start_playback(vc)
     else:

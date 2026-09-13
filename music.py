@@ -27,23 +27,33 @@ PLAYLIST_OPTIONS = {
     "ignoreerrors": True,
 }
 
-def get_song(song, from_url=False):
-    with yt_dlp.YoutubeDL(DOWNLOAD_OPTIONS) as ydl:
-        if not from_url:
-            song = search(song)
-        info = ydl.extract_info(song, download=True)
-        song_id = info.get("id")
-        song_name = info.get("title")
-        song_artist = info.get("channel") or info.get("uploader")
-        song_duration = info.get("duration")
-
-    return_song = {
-        "song_id": song_id,
-        "song_name": song_name,
-        "song_artist": song_artist,
-        "song_duration": song_duration,
+def _song_dict(info):
+    return {
+        "song_id": info.get("id"),
+        "song_name": info.get("title"),
+        "song_artist": info.get("channel") or info.get("uploader"),
+        "song_duration": info.get("duration"),
     }
-    return return_song, song_id
+
+def get_song_info(song, from_url=False):
+    if not from_url:
+        song = search(song)
+    with yt_dlp.YoutubeDL({**DOWNLOAD_OPTIONS, "quiet": True}) as ydl:
+        info = ydl.extract_info(song, download=False)
+    url = info.get("webpage_url") or song
+    return _song_dict(info), info.get("id"), url
+
+def download_song(song_id, url):
+    if os.path.exists(get_path(song_id)):
+        return True
+    with yt_dlp.YoutubeDL(DOWNLOAD_OPTIONS) as ydl:
+        ydl.download([url])
+    return os.path.exists(get_path(song_id))
+
+def get_song(song, from_url=False):
+    song_info, song_id, url = get_song_info(song, from_url)
+    download_song(song_id, url)
+    return song_info, song_id
 
 def search(song):
     #search_url = f"https://music.youtube.com/search?q={song}"
@@ -57,21 +67,23 @@ def search(song):
             return url
     return None
     
-def get_playlist(playlist_url):
-    with yt_dlp.YoutubeDL(PLAYLIST_OPTIONS) as ydl:
-        info = ydl.extract_info(playlist_url, download=True)
-    playlist = []
-    song_ids = []
+def get_playlist_info(playlist_url):
+    with yt_dlp.YoutubeDL({**PLAYLIST_OPTIONS, "quiet": True}) as ydl:
+        info = ydl.extract_info(playlist_url, download=False)
+    entries = []
     for e in info.get("entries", []):
         if not e:
             continue
-        playlist.append({
-            "song_id": e.get("id"),
-            "song_name": e.get("title"),
-            "song_artist": e.get("channel") or e.get("uploader"),
-            "song_duration": e.get("duration"),
-        })
-        song_ids.append(e.get("id"))
+        url = e.get("webpage_url") or e.get("url") or f"https://www.youtube.com/watch?v={e.get('id')}"
+        entries.append((_song_dict(e), e.get("id"), url))
+    return info.get("title"), entries
+
+def get_playlist(playlist_url):
+    _, entries = get_playlist_info(playlist_url)
+    playlist = [e[0] for e in entries]
+    song_ids = [e[1] for e in entries]
+    for _, song_id, url in entries:
+        download_song(song_id, url)
     return playlist, song_ids
 
 def delete_song(song_id):
@@ -81,15 +93,10 @@ def get_path(song_id):
     return os.path.join(MUSIC_CACHE, f"{song_id}.mp3")
 
 def ensure_audio(song):
-    path = get_path(song["song_id"])
-    if os.path.exists(path):
-        return True
-    url = f"https://www.youtube.com/watch?v={song['song_id']}"
     try:
-        get_song(url, from_url=True)
+        return download_song(song["song_id"], f"https://www.youtube.com/watch?v={song['song_id']}")
     except Exception:
         return False
-    return os.path.exists(path)
 
 if __name__ == "__main__":
     #print(get_song("There is a reason Suzuki Konomi", from_url=False))

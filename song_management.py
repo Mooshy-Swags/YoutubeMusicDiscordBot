@@ -9,6 +9,19 @@ id_queue = []
 current_song = 0
 songs_played = 0
 
+class _DownloadState:
+    __slots__ = ("song_id", "ready", "failed", "event")
+    def __init__(self, song_id):
+        self.song_id = song_id
+        self.ready = False
+        self.failed = False
+        self.event = asyncio.Event()
+
+pending_songs = []
+_pending_lock = asyncio.Lock()
+_known_downloads = {}
+_flush_hook = None
+
 MAX_CACHE = 5
 MAX_DISPLAY = 10
 
@@ -59,24 +72,79 @@ def load_cache():
 
 load_cache()
 
+async def _start_download(state, url):
+    try:
+        ok = await asyncio.to_thread(music.download_song, state.song_id, url)
+        state.ready = ok
+        if not ok:
+            state.failed = True
+    except Exception:
+        state.failed = True
+    state.event.set()
+    await _try_flush()
+
+async def _enqueue(song_info, song_id, url):
+    async with _pending_lock:
+        state = _known_downloads.get(song_id)
+        spawn = state is None
+        if spawn:
+            state = _DownloadState(song_id)
+            _known_downloads[song_id] = state
+        pending_songs.append({"song": song_info, "song_id": song_id, "state": state})
+    if spawn:
+        asyncio.create_task(_start_download(state, url))
+
+async def _try_flush():
+    global songs_queue, id_queue
+    announcements = []
+    failures = []
+    async with _pending_lock:
+        while pending_songs:
+            head = pending_songs[0]
+            state = head["state"]
+            if not (state.ready or state.failed):
+                break
+            entry = pending_songs.pop(0)
+            if state.failed:
+                failures.append(entry["song"].get("song_name"))
+                continue
+            songs_queue.append(entry["song"])
+            id_queue.append(entry["song_id"])
+            number = songs_played + len(songs_queue)
+            info = entry["song"]
+            announcements.append((info.get("song_name"), info.get("song_artist"), number))
+        referenced = {p["state"] for p in pending_songs}
+        for song_id, state in list(_known_downloads.items()):
+            if state not in referenced:
+                del _known_downloads[song_id]
+    if announcements or failures:
+        _notify_flush(announcements, failures)
+
+def set_flush_hook(func):
+    global _flush_hook
+    _flush_hook = func
+
+def _notify_flush(announcements, failures):
+    if _flush_hook is not None:
+        asyncio.create_task(_flush_hook(announcements, failures))
+
 async def add(query):
     global songs_queue, id_queue
     try:
         if "playlist?" in query:
-            songs, ids = await asyncio.to_thread(music.get_playlist, query)
-            songs_queue = [*songs_queue, *songs]
-            id_queue = [*id_queue, *ids]
-            return {"playlist": True}
+            title, entries = await asyncio.to_thread(music.get_playlist_info, query)
+            for song_info, song_id, url in entries:
+                await _enqueue(song_info, song_id, url)
+            return {"playlist": True, "playlist_name": title, "count": len(entries)}
 
-        song, song_id = await asyncio.to_thread(
-            music.get_song,
+        song_info, song_id, url = await asyncio.to_thread(
+            music.get_song_info,
             query,
             ("youtube.com" in query or "youtu.be" in query),
         )
-        songs_queue.append(song)
-        id_queue.append(song_id)
-        return {**song, "playlist": False}
-    except:
+        await _enqueue(song_info, song_id, url)
+        return {**song_info, "playlist": False}
+    except Exception:
         return None
 
 def get_song():
