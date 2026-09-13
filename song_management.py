@@ -21,6 +21,7 @@ pending_songs = []
 _pending_lock = asyncio.Lock()
 _known_downloads = {}
 _flush_hook = None
+_download_hook = None
 
 MAX_CACHE = 5
 MAX_DISPLAY = 10
@@ -82,6 +83,7 @@ async def _start_download(state, url):
         state.failed = True
     state.event.set()
     await _try_flush()
+    _notify_download()
 
 async def _enqueue(song_info, song_id, url):
     async with _pending_lock:
@@ -93,6 +95,7 @@ async def _enqueue(song_info, song_id, url):
         pending_songs.append({"song": song_info, "song_id": song_id, "state": state})
     if spawn:
         asyncio.create_task(_start_download(state, url))
+    _notify_download()
 
 async def _try_flush():
     global songs_queue, id_queue
@@ -125,6 +128,22 @@ def set_flush_hook(func):
 def _notify_flush(announcements, failures):
     if _flush_hook is not None:
         asyncio.create_task(_flush_hook(announcements, failures))
+
+def set_download_hook(func):
+    global _download_hook
+    _download_hook = func
+
+def _notify_download():
+    if _download_hook is not None:
+        asyncio.create_task(_download_hook())
+
+async def download_progress():
+    async with _pending_lock:
+        total = len(pending_songs)
+        if total == 0:
+            return None
+        done = sum(1 for e in pending_songs if e["state"].ready or e["state"].failed)
+        return total, done
 
 async def add(query):
     global songs_queue, id_queue

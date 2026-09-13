@@ -14,8 +14,11 @@ seek_end = False
 seek_target = None
 panel_message = None
 queue_message = None
+download_message = None
+download_text = None
 queue_page = 0
 refresh_lock = asyncio.Lock()
+download_lock = asyncio.Lock()
 
 LOOP_NONE = 0
 LOOP_PLAYLIST = 1
@@ -126,6 +129,43 @@ async def _delete_message(message):
             await message.delete()
         except (discord.NotFound, discord.HTTPException):
             pass
+
+async def _render_download():
+    global download_message, download_text
+    async with download_lock:
+        if channel is None:
+            download_message = None
+            download_text = None
+            return
+        info = await song_management.download_progress()
+        if info is None:
+            if download_message is not None:
+                await _delete_message(download_message)
+                download_message = None
+            download_text = None
+            return
+        total, done = info
+        ratio = done / total
+        filled = round(ratio * 10)
+        bar = UNIT * filled + EMPTY * (10 - filled)
+        text = f"**Downloading queue:**\n{bar} {int(ratio * 100)}%  {done}/{total} downloaded"
+        if text == download_text and download_message is not None:
+            return
+        if download_message is None:
+            download_message = await channel.send(text)
+        else:
+            try:
+                await download_message.edit(content=text)
+            except (discord.NotFound, discord.HTTPException):
+                download_message = None
+                download_message = await channel.send(text)
+        download_text = text
+
+async def on_download_progress():
+    try:
+        await _render_download()
+    except Exception as e:
+        print(f"[player] download progress error: {e!r}")
 
 async def start_playback(vc: discord.VoiceClient):
     song = song_management.get_song()
@@ -266,8 +306,10 @@ async def on_songs_flushed(announcements, failures):
         if not (vc.is_playing() or vc.is_paused()):
             await start_playback(vc)
         await refresh_panel()
+        await _render_download()
     except Exception as e:
         print(f"[player] on_songs_flushed error: {e!r}")
 
 song_management.set_flush_hook(on_songs_flushed)
+song_management.set_download_hook(on_download_progress)
 
