@@ -16,6 +16,7 @@ panel_message = None
 queue_message = None
 queue_page = 0
 refresh_lock = asyncio.Lock()
+announce_lock = asyncio.Lock()
 
 LOOP_NONE = 0
 LOOP_PLAYLIST = 1
@@ -242,16 +243,17 @@ async def on_songs_flushed(announcements, failures):
     if vc is None:
         return
     announced = bool(announcements or failures)
-    if not (vc.is_playing() or vc.is_paused()):
-        await start_playback(vc)
-    if announced:
-        for name, artist, number in announcements:
-            await channel.send(f"Queued `{name}` by `{artist}` — now #{number} in the queue.")
-        for name in failures:
-            await channel.send(f"Couldn't download `{name}` — skipped.")
-        await refresh_panel(force_repost=True)
-    else:
-        await refresh_panel()
+    async with announce_lock:
+        if not (vc.is_playing() or vc.is_paused()):
+            await start_playback(vc)
+        if announced:
+            for name, artist, number in announcements:
+                await channel.send(f"Queued `{name}` by `{artist}` — now #{number} in the queue.")
+            for name in failures:
+                await channel.send(f"Couldn't download `{name}` — skipped.")
+            await refresh_panel(force_repost=True)
+        else:
+            await refresh_panel()
 
 song_management.set_flush_hook(on_songs_flushed)
 
