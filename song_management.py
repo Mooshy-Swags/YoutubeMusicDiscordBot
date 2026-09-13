@@ -98,6 +98,27 @@ def move_previous():
     current_song -= 1
     return songs_queue[current_song]
 
+def go_to_start():
+    global current_song
+    if not songs_queue:
+        return None
+    current_song = 0
+    return songs_queue[current_song]
+
+def go_to_end():
+    global current_song
+    if not songs_queue:
+        return None
+    current_song = len(songs_queue) - 1
+    return songs_queue[current_song]
+
+def go_to(index):
+    global current_song
+    if index < 0 or index >= len(songs_queue):
+        return None
+    current_song = index
+    return songs_queue[current_song]
+
 
 def check_cache():
     global current_song, songs_played
@@ -120,8 +141,42 @@ def get_queue():
     start = get_queue_start()
     return songs_queue[start:current_song + MAX_CACHE]
 
-def remove_current():
-    songs_queue.pop(current_song)
-    id_queue.pop(current_song)
+def remove_song(index):
+    global current_song
+    if index < 0 or index >= len(songs_queue):
+        return None
+    song = songs_queue.pop(index)
+    song_id = id_queue.pop(index)
+    if index < current_song:
+        current_song -= 1
+    elif index == current_song and current_song >= len(songs_queue):
+        current_song = max(len(songs_queue) - 1, 0)
+    if song_id not in id_queue:
+        try:
+            music.delete_song(song_id)
+        except OSError:
+            pass
+    return song
+
+def remove_songs(start, end):
+    removed = []
+    for i in range(end, start - 1, -1):
+        song = remove_song(i)
+        if song is not None:
+            removed.append(song)
+    return removed
+
+def clear_queue():
+    global songs_queue, id_queue, current_song, songs_played
+    unique_ids = set(id_queue)
+    songs_queue.clear()
+    id_queue.clear()
+    current_song = 0
+    songs_played = 0
+    for song_id in unique_ids:
+        try:
+            music.delete_song(song_id)
+        except OSError:
+            pass
 
 

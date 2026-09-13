@@ -8,8 +8,22 @@ from controls import ControlView
 
 channel = None
 seek_previous = False
+seek_next = False
+seek_start = False
+seek_end = False
+seek_target = None
 panel_message = None
 queue_message = None
+
+LOOP_NONE = 0
+LOOP_PLAYLIST = 1
+LOOP_SINGLE = 2
+loop_mode = LOOP_NONE
+
+def toggle_loop():
+    global loop_mode
+    loop_mode = (loop_mode + 1) % 3
+    return loop_mode
 
 play_started = None
 paused_total = 0.0
@@ -141,14 +155,44 @@ async def _play(vc, song):
     path = music.get_path(song.get("song_id"))
     vc.play(discord.FFmpegPCMAudio(path), after=lambda e: asyncio.run_coroutine_threadsafe(_maybe_next(vc), vc.loop))
 
-async def _maybe_next(vc):
-    global seek_previous, panel_message, queue_message
+async def remove_panel():
+    global panel_message, queue_message
+    await _delete_message(panel_message)
+    await _delete_message(queue_message)
+    panel_message = queue_message = None
 
-    if seek_previous:
+async def _maybe_next(vc):
+    global seek_previous, seek_next, seek_start, seek_end, seek_target, panel_message, queue_message
+
+    if not song_management.songs_queue:
+        seek_previous = seek_next = seek_start = seek_end = False
+        seek_target = None
+        await remove_panel()
+        return
+
+    if seek_start:
+        seek_start = False
+        song = song_management.go_to_start()
+    elif seek_end:
+        seek_end = False
+        song = song_management.go_to_end()
+    elif seek_target is not None:
+        song = song_management.go_to(seek_target)
+        seek_target = None
+    elif seek_previous:
         seek_previous = False
         song = song_management.move_previous()
+    elif seek_next:
+        seek_next = False
+        song = song_management.move_next()
+        if song is None and loop_mode != LOOP_NONE:
+            song = song_management.go_to_start()
+    elif loop_mode == LOOP_SINGLE:
+        song = song_management.get_song()
     else:
         song = song_management.move_next()
+        if song is None and loop_mode == LOOP_PLAYLIST:
+            song = song_management.go_to_start()
 
     if song is not None:
         await asyncio.run_coroutine_threadsafe(start_playback(vc), vc.loop)

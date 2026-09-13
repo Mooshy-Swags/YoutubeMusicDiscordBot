@@ -156,14 +156,148 @@ async def skip(interaction: discord.Interaction):
         return
     if vc.is_paused():
         vc.resume()
+    player.seek_next = True
     vc.stop()
     await interaction.response.send_message("Skipping to next song.")
+
+@bot.tree.command(name="top")
+async def top(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if vc is None:
+        await interaction.response.send_message(NOT_IN_VC, ephemeral=True)
+        return
+    if not (vc.is_playing() or vc.is_paused()):
+        song_management.go_to_start()
+        await interaction.response.send_message("Going to the first song.")
+        await player.start_playback(vc)
+        return
+    if vc.is_paused():
+        vc.resume()
+    player.seek_start = True
+    vc.stop()
+    await interaction.response.send_message("Going to the first song.")
+
+@bot.tree.command(name="bottom")
+async def bottom(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if vc is None:
+        await interaction.response.send_message(NOT_IN_VC, ephemeral=True)
+        return
+    if not (vc.is_playing() or vc.is_paused()):
+        song_management.go_to_end()
+        await interaction.response.send_message("Going to the last song.")
+        await player.start_playback(vc)
+        return
+    if vc.is_paused():
+        vc.resume()
+    player.seek_end = True
+    vc.stop()
+    await interaction.response.send_message("Going to the last song.")
+
+@bot.tree.command(name="toggleloop")
+async def toggleloop(interaction: discord.Interaction):
+    loop_state = player.toggle_loop()
+    if loop_state == player.LOOP_NONE:
+        message = "Looping disabled."
+    elif loop_state == player.LOOP_PLAYLIST:
+        message = "Looping playlist."
+    else:
+        message = "Looping single song."
+    await interaction.response.send_message(message)
+
+@bot.tree.command(name="skipto")
+@discord.app_commands.describe(number="Song number to play, as shown in /queue")
+async def skipto(interaction: discord.Interaction, number: int):
+    vc = interaction.guild.voice_client
+    if vc is None:
+        await interaction.response.send_message(NOT_IN_VC, ephemeral=True)
+        return
+    target = number - 1 - song_management.songs_played
+    song = song_management.go_to(target)
+    if song is None:
+        await interaction.response.send_message(
+            f"No song number {number} in the queue (has {len(song_management.songs_queue)} song(s)).",
+            ephemeral=True,
+        )
+        return
+    if not (vc.is_playing() or vc.is_paused()):
+        await interaction.response.send_message(f"Playing song {number}: `{song.get('song_name')}`.")
+        await player.start_playback(vc)
+        return
+    if vc.is_paused():
+        vc.resume()
+    player.seek_target = target
+    vc.stop()
+    await interaction.response.send_message(f"Skipping to song {number}: `{song.get('song_name')}`.")
+
+@bot.tree.command(name="removesong")
+@discord.app_commands.describe(
+    number="Song number to remove, as shown in /queue (leave empty for the current song)",
+    last="Optional ending song number to remove a range (inclusive)",
+)
+async def removesong(interaction: discord.Interaction, number: int = None, last: int = None):
+    if number is None:
+        if last is not None:
+            await interaction.response.send_message(
+                "Provide a starting song number to remove a range.", ephemeral=True
+            )
+            return
+        start_index = song_management.current_song
+        end_index = start_index
+    else:
+        start_index = number - 1 - song_management.songs_played
+        end_index = start_index if last is None else last - 1 - song_management.songs_played
+
+    if end_index < start_index:
+        await interaction.response.send_message(
+            "The ending song number must be greater than or equal to the starting song number.",
+            ephemeral=True,
+        )
+        return
+
+    was_current = start_index <= song_management.current_song <= end_index
+    removed = song_management.remove_songs(start_index, end_index)
+    if not removed:
+        if number is None:
+            await interaction.response.send_message("There are no songs to remove.", ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                f"No song number {number} in the queue (has {len(song_management.songs_queue)} song(s)).",
+                ephemeral=True,
+            )
+        return
+    vc = interaction.guild.voice_client
+    if was_current and vc is not None and (vc.is_playing() or vc.is_paused()):
+        if vc.is_paused():
+            vc.resume()
+        player.seek_target = song_management.current_song
+        vc.stop()
+        label = f"Removed `{removed[0].get('song_name')}`." if len(removed) == 1 else f"Removed {len(removed)} songs."
+        await interaction.response.send_message(f"{label} Playing the next song.")
+    else:
+        if len(removed) == 1:
+            await interaction.response.send_message(f"Removed `{removed[0].get('song_name')}`.")
+        else:
+            await interaction.response.send_message(f"Removed {len(removed)} songs.")
+
+@bot.tree.command(name="removeall")
+async def removeall(interaction: discord.Interaction):
+    count = len(song_management.songs_queue)
+    if count == 0:
+        await interaction.response.send_message("The queue is already empty.", ephemeral=True)
+        return
+    song_management.clear_queue()
+    vc = interaction.guild.voice_client
+    if vc is not None and (vc.is_playing() or vc.is_paused()):
+        vc.stop()
+    await player.remove_panel()
+    await interaction.response.send_message(f"Removed all {count} songs from the queue.")
 
 @bot.tree.command(name="previous")
 async def previous(interaction: discord.Interaction):
     vc = interaction.guild.voice_client
     if vc is None:
-        await interaction.response.send_message(NOT_IN_VC, ephmeral=True)
+        await interaction.response.send_message(NOT_IN_VC, ephemeral=True)
         return
     if not (vc.is_playing() or vc.is_paused()):
         song_management.move_previous()
