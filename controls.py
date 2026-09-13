@@ -64,7 +64,12 @@ class ControlView(discord.ui.View):
             player.mark_pause()
             button.emoji = "▶"
         else:
+            if song_management.get_song() is None:
+                await interaction.response.defer()
+                return
             await interaction.response.defer()
+            player.channel = interaction.channel
+            await player.start_playback(vc)
             return
         await interaction.response.edit_message(view=self)
 

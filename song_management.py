@@ -79,6 +79,8 @@ async def add(query):
         return None
 
 def get_song():
+    if not songs_queue:
+        return None
     return songs_queue[current_song]
 
 def move_next():
