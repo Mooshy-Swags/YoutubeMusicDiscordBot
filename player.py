@@ -176,17 +176,17 @@ async def refresh_panel(force_repost=False):
 async def _play(vc, song):
     global progress_task
     _start_timer()
-    await refresh_panel()
-
-    if progress_task is not None:
-        progress_task.cancel()
-    progress_task = asyncio.create_task(update_progress(vc))
 
     path = music.get_path(song.get("song_id"))
     if not os.path.exists(path):
         await asyncio.to_thread(music.ensure_audio, song)
         path = music.get_path(song.get("song_id"))
     vc.play(discord.FFmpegPCMAudio(path), after=lambda e: asyncio.run_coroutine_threadsafe(_maybe_next(vc), vc.loop))
+
+    await refresh_panel()
+    if progress_task is not None:
+        progress_task.cancel()
+    progress_task = asyncio.create_task(update_progress(vc))
 
 async def remove_panel():
     global panel_message, queue_message
@@ -236,23 +236,22 @@ async def _maybe_next(vc):
         await channel.send("No more songs in queue.")
 
 async def on_songs_flushed(announcements, failures):
-    announced = channel is not None and bool(announcements or failures)
-    if announced:
-        for name, artist, number in announcements:
-            await channel.send(f"Queued `{name}` by `{artist}` — now #{number} in the queue.")
-        for name in failures:
-            await channel.send(f"Couldn't download `{name}` — skipped.")
     if channel is None:
         return
     vc = channel.guild.voice_client
     if vc is None:
         return
-    if vc.is_playing() or vc.is_paused():
-        await refresh_panel(force_repost=announced)
-    else:
-        if announced:
-            await refresh_panel(force_repost=True)
+    announced = bool(announcements or failures)
+    if not (vc.is_playing() or vc.is_paused()):
         await start_playback(vc)
+    if announced:
+        for name, artist, number in announcements:
+            await channel.send(f"Queued `{name}` by `{artist}` — now #{number} in the queue.")
+        for name in failures:
+            await channel.send(f"Couldn't download `{name}` — skipped.")
+        await refresh_panel(force_repost=True)
+    else:
+        await refresh_panel()
 
 song_management.set_flush_hook(on_songs_flushed)
 
