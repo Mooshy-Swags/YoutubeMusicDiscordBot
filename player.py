@@ -236,6 +236,19 @@ async def _maybe_next(vc):
         panel_message = queue_message = None
         await channel.send("No more songs in queue.")
 
+async def _announce(announcements, failures):
+    async with announce_lock:
+        for name, artist, number in announcements:
+            try:
+                await channel.send(f"Queued `{name}` by `{artist}` — now #{number} in the queue.")
+            except Exception as e:
+                print(f"[player] announcement failed: {e!r}")
+        for name in failures:
+            try:
+                await channel.send(f"Couldn't download `{name}` — skipped.")
+            except Exception as e:
+                print(f"[player] failure announcement failed: {e!r}")
+
 async def on_songs_flushed(announcements, failures):
     if channel is None:
         return
@@ -243,17 +256,14 @@ async def on_songs_flushed(announcements, failures):
     if vc is None:
         return
     announced = bool(announcements or failures)
-    async with announce_lock:
+    try:
+        if announced:
+            await _announce(announcements, failures)
         if not (vc.is_playing() or vc.is_paused()):
             await start_playback(vc)
-        if announced:
-            for name, artist, number in announcements:
-                await channel.send(f"Queued `{name}` by `{artist}` — now #{number} in the queue.")
-            for name in failures:
-                await channel.send(f"Couldn't download `{name}` — skipped.")
-            await refresh_panel(force_repost=True)
-        else:
-            await refresh_panel()
+        await refresh_panel()
+    except Exception as e:
+        print(f"[player] on_songs_flushed error: {e!r}")
 
 song_management.set_flush_hook(on_songs_flushed)
 
