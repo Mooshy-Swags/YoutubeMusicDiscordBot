@@ -293,6 +293,21 @@ async def removeall(interaction: discord.Interaction):
     await player.remove_panel()
     await interaction.response.send_message(f"Removed all {count} songs from the queue.")
 
+@bot.tree.command(name="reloadcommands")
+async def reloadcommands(interaction: discord.Interaction):
+    app = await bot.application_info()
+    if interaction.user.id != app.owner.id:
+        await interaction.response.send_message("Only the bot owner can use this.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    app_id = bot.application_id
+    await bot.http.bulk_upsert_global_commands(app_id, payload=[])
+    for guild in bot.guilds:
+        await bot.http.bulk_upsert_guild_commands(app_id, guild.id, payload=[])
+        bot.tree.copy_global_to(guild=guild)
+        await bot.tree.sync(guild=guild)
+    await interaction.followup.send("All commands wiped and re-synced.", ephemeral=True)
+
 @bot.tree.command(name="previous")
 async def previous(interaction: discord.Interaction):
     vc = interaction.guild.voice_client
