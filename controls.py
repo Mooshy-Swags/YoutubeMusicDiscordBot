@@ -116,3 +116,48 @@ class ControlView(discord.ui.View):
             button.emoji = "🔂"
             button.style = discord.ButtonStyle.primary
         await interaction.response.edit_message(view=self)
+
+
+class QueueView(discord.ui.View):
+    def __init__(self, page):
+        super().__init__(timeout=None)
+        self.page = page
+        total = song_management.page_count()
+        current_page = song_management.current_song // song_management.MAX_DISPLAY
+        for child in self.children:
+            if not isinstance(child, discord.ui.Button):
+                continue
+            if child.custom_id == "queue_prev":
+                if page == 0:
+                    child.disabled = True
+                    child.style = discord.ButtonStyle.secondary
+                elif current_page < page:
+                    child.style = discord.ButtonStyle.success
+                else:
+                    child.style = discord.ButtonStyle.primary
+            elif child.custom_id == "queue_next":
+                if page >= total - 1:
+                    child.disabled = True
+                    child.style = discord.ButtonStyle.secondary
+                elif current_page > page:
+                    child.style = discord.ButtonStyle.success
+                else:
+                    child.style = discord.ButtonStyle.primary
+
+    @discord.ui.button(label="\u25c0", custom_id="queue_prev", style=discord.ButtonStyle.secondary)
+    async def queue_prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        page = max(0, self.page - 1)
+        player.queue_page = page
+        await interaction.response.edit_message(
+            embed=player.build_queue_embed(page),
+            view=QueueView(page),
+        )
+
+    @discord.ui.button(label="\u25b6", custom_id="queue_next", style=discord.ButtonStyle.secondary)
+    async def queue_next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        page = min(song_management.page_count() - 1, self.page + 1)
+        player.queue_page = page
+        await interaction.response.edit_message(
+            embed=player.build_queue_embed(page),
+            view=QueueView(page),
+        )

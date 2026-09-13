@@ -4,7 +4,7 @@ import time
 import discord
 import music
 import song_management
-from controls import ControlView
+from controls import ControlView, QueueView
 
 channel = None
 seek_previous = False
@@ -14,6 +14,7 @@ seek_end = False
 seek_target = None
 panel_message = None
 queue_message = None
+queue_page = 0
 
 LOOP_NONE = 0
 LOOP_PLAYLIST = 1
@@ -100,9 +101,11 @@ async def update_progress(vc, interval=2.5):
                 break
         await asyncio.sleep(interval)
 
-async def build_queue_embed():
-    queue_list = song_management.get_queue()
-    start = song_management.get_queue_start()
+def build_queue_embed(page):
+    pages = song_management.page_count()
+    page = max(0, min(page, pages - 1))
+    queue_list = song_management.get_queue(page)
+    start = page * song_management.MAX_DISPLAY
     current = song_management.current_song
     played = song_management.songs_played
     lines = []
@@ -112,11 +115,9 @@ async def build_queue_embed():
         name = str(song.get("song_name"))[:60]
         artist = str(song.get("song_artist"))[:40]
         lines.append(f"{marker}`{played + index + 1}.` **{name}** — {artist}")
-    if start > 0:
-        lines.insert(0, "...")
-    if start + len(queue_list) < len(song_management.songs_queue):
-        lines.append("...")
-    return discord.Embed(title="Queue", description="\n".join(lines), color=discord.Color.blurple())
+    embed = discord.Embed(title="Queue", description="\n".join(lines), color=discord.Color.blurple())
+    embed.set_footer(text=f"Page {page + 1} of {pages}")
+    return embed
 
 async def _delete_message(message):
     if message is not None:
@@ -131,17 +132,23 @@ async def start_playback(vc: discord.VoiceClient):
         await _play(vc, song)
 
 async def refresh_panel():
-    global panel_message, queue_message
+    global panel_message, queue_message, queue_page
     text = build_panel_text()
     if text is None:
         return
+
+    pages = song_management.page_count()
+    queue_page = max(0, min(queue_page, pages - 1))
 
     await _delete_message(panel_message)
     await _delete_message(queue_message)
     panel_message = queue_message = None
 
     panel_message = await channel.send(text, view=ControlView())
-    queue_message = await channel.send(embed=await build_queue_embed())
+    queue_message = await channel.send(
+        embed=build_queue_embed(queue_page),
+        view=QueueView(queue_page),
+    )
 
 async def _play(vc, song):
     global progress_task

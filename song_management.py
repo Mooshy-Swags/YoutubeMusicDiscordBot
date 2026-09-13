@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import music
 import os
 
@@ -136,12 +137,12 @@ def check_cache():
         return
     music.delete_song(id)
 
-def get_queue_start():
-    return max(0, current_song - MAX_CACHE)
+def get_queue(page=0):
+    start = page * MAX_DISPLAY
+    return songs_queue[start:start + MAX_DISPLAY]
 
-def get_queue():
-    start = get_queue_start()
-    return songs_queue[start:current_song + MAX_CACHE]
+def page_count():
+    return max(1, math.ceil(len(songs_queue) / MAX_DISPLAY))
 
 def remove_song(index):
     global current_song
