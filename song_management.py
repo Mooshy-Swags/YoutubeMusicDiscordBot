@@ -97,26 +97,26 @@ async def _enqueue(song_info, song_id, url):
 async def _try_flush():
     global songs_queue, id_queue
     async with _pending_lock:
-        while pending_songs:
-            head = pending_songs[0]
-            state = head["state"]
-            if not (state.ready or state.failed):
-                break
-            entry = pending_songs.pop(0)
+        if not pending_songs:
+            return
+        if not all((entry["state"].ready or entry["state"].failed) for entry in pending_songs):
+            return
+        announcements = []
+        failures = []
+        for entry in pending_songs:
+            state = entry["state"]
             if state.failed:
-                _notify_flush([], [entry["song"].get("song_name")])
+                failures.append(entry["song"].get("song_name"))
                 continue
             songs_queue.append(entry["song"])
             id_queue.append(entry["song_id"])
             number = songs_played + len(songs_queue)
             info = entry["song"]
-            _notify_flush(
-                [(info.get("song_name"), info.get("song_artist"), number)], []
-            )
-        referenced = {p["state"] for p in pending_songs}
-        for song_id, state in list(_known_downloads.items()):
-            if state not in referenced:
-                del _known_downloads[song_id]
+            announcements.append((info.get("song_name"), info.get("song_artist"), number))
+        pending_songs.clear()
+        _known_downloads.clear()
+    if announcements or failures:
+        _notify_flush(announcements, failures)
 
 def set_flush_hook(func):
     global _flush_hook

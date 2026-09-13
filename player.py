@@ -16,7 +16,6 @@ panel_message = None
 queue_message = None
 queue_page = 0
 refresh_lock = asyncio.Lock()
-announce_lock = asyncio.Lock()
 
 LOOP_NONE = 0
 LOOP_PLAYLIST = 1
@@ -237,17 +236,22 @@ async def _maybe_next(vc):
         await channel.send("No more songs in queue.")
 
 async def _announce(announcements, failures):
-    async with announce_lock:
-        for name, artist, number in announcements:
-            try:
-                await channel.send(f"Queued `{name}` by `{artist}` — now #{number} in the queue.")
-            except Exception as e:
-                print(f"[player] announcement failed: {e!r}")
-        for name in failures:
-            try:
-                await channel.send(f"Couldn't download `{name}` — skipped.")
-            except Exception as e:
-                print(f"[player] failure announcement failed: {e!r}")
+    if not (announcements or failures):
+        return
+    count = len(announcements) + len(failures)
+    if count > song_management.MAX_CACHE:
+        content = "Queued multiple songs."
+    else:
+        lines = [
+            f"Queued `{name}` by `{artist}` — now #{number} in the queue."
+            for name, artist, number in announcements
+        ]
+        lines.extend(f"Couldn't download `{name}` — skipped." for name in failures)
+        content = "\n".join(lines)
+    try:
+        await channel.send(content)
+    except Exception as e:
+        print(f"[player] announcement failed: {e!r}")
 
 async def on_songs_flushed(announcements, failures):
     if channel is None:
