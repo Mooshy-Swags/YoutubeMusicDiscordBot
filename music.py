@@ -24,6 +24,7 @@ SEARCH_OPTIONS = {
 PLAYLIST_OPTIONS = {
     **DOWNLOAD_OPTIONS,
     "noplaylist": False,
+    "extract_flat": True,
     "ignoreerrors": True,
 }
 
