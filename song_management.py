@@ -37,6 +37,7 @@ def move_next():
     global current_song
     if len(songs_queue) == current_song + 1:
         current_song += 1
+        check_cache()
         return None
     current_song += 1
     check_cache()
