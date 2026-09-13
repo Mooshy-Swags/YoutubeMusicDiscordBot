@@ -132,7 +132,7 @@ async def start_playback(vc: discord.VoiceClient):
     if song:
         await _play(vc, song)
 
-async def refresh_panel():
+async def refresh_panel(force_repost=False):
     global panel_message, queue_message, queue_page
     async with refresh_lock:
         text = build_panel_text()
@@ -144,6 +144,14 @@ async def refresh_panel():
         embed = build_queue_embed(queue_page)
         panel_view = ControlView()
         queue_view = QueueView(queue_page)
+
+        if force_repost:
+            await _delete_message(panel_message)
+            await _delete_message(queue_message)
+            panel_message = queue_message = None
+            panel_message = await channel.send(text, view=panel_view)
+            queue_message = await channel.send(embed=embed, view=queue_view)
+            return
 
         if panel_message is not None:
             try:
@@ -228,7 +236,8 @@ async def _maybe_next(vc):
         await channel.send("No more songs in queue.")
 
 async def on_songs_flushed(announcements, failures):
-    if channel is not None and (announcements or failures):
+    announced = channel is not None and bool(announcements or failures)
+    if announced:
         for name, artist, number in announcements:
             await channel.send(f"Queued `{name}` by `{artist}` — now #{number} in the queue.")
         for name in failures:
@@ -239,8 +248,10 @@ async def on_songs_flushed(announcements, failures):
     if vc is None:
         return
     if vc.is_playing() or vc.is_paused():
-        await refresh_panel()
+        await refresh_panel(force_repost=announced)
     else:
+        if announced:
+            await refresh_panel(force_repost=True)
         await start_playback(vc)
 
 song_management.set_flush_hook(on_songs_flushed)

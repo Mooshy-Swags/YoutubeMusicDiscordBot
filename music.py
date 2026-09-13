@@ -2,13 +2,14 @@ import yt_dlp
 import os
 
 MUSIC_CACHE = ".music_cache/"
+COOKIES_FILE = ".music_cookies.txt"
 
 DOWNLOAD_OPTIONS = {
     "format": "bestaudio/best",
     "outtmpl": os.path.join(MUSIC_CACHE, "%(id)s.%(ext)s"),
     "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "2"}],
     "postprocessor_args": {"FFmpegExtractAudio": ["-map_metadata", "-1"]},
-    "cookiesfrombrowser": ("firefox",),
+    "cookies": COOKIES_FILE,
     "noplaylist": True,
     "quiet": False,
     "nooverwrites": True,
@@ -18,7 +19,7 @@ SEARCH_OPTIONS = {
     "quiet": True,
     "extract_flat": True,
     "noplaylist": True,
-    "cookiesfrombrowser": ("firefox",),
+    "cookies": COOKIES_FILE,
 }
 
 PLAYLIST_OPTIONS = {
@@ -34,6 +35,15 @@ def _song_dict(info):
         "song_artist": info.get("channel") or info.get("uploader"),
         "song_duration": info.get("duration"),
     }
+
+def refresh_cookies():
+    try:
+        from yt_dlp.cookies import extract_cookies_from_browser
+        jar = extract_cookies_from_browser("firefox")
+        jar.save(filename=COOKIES_FILE, ignore_discard=True, ignore_expires=True)
+    except Exception as exc:
+        if not os.path.exists(COOKIES_FILE):
+            print(f"[Warning] Could not export Firefox cookies ({exc}); downloads may fail with HTTP 403.")
 
 def get_song_info(song, from_url=False):
     if not from_url:

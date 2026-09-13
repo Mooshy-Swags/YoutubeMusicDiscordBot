@@ -335,6 +335,7 @@ async def previous(interaction: discord.Interaction):
     await interaction.response.send_message("Going back a song.")
 
 try:
+    music.refresh_cookies()
     bot.run(TOKEN)
 finally:
     song_management.save_cache()
