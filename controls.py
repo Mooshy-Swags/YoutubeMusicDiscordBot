@@ -53,7 +53,15 @@ class ControlView(discord.ui.View):
     async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button):
         vc = interaction.guild.voice_client
         if vc is None:
+            if not interaction.user.voice or not interaction.user.voice.channel:
+                await interaction.response.defer()
+                return
             await interaction.response.defer()
+            vc = await interaction.user.voice.channel.connect()
+            if song_management.get_song() is None:
+                return
+            player.channel = interaction.channel
+            await player.start_playback(vc)
             return
         if vc.is_paused():
             vc.resume()

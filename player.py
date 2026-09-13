@@ -153,6 +153,9 @@ async def _play(vc, song):
     progress_task = asyncio.create_task(update_progress(vc))
 
     path = music.get_path(song.get("song_id"))
+    if not os.path.exists(path):
+        await asyncio.to_thread(music.ensure_audio, song)
+        path = music.get_path(song.get("song_id"))
     vc.play(discord.FFmpegPCMAudio(path), after=lambda e: asyncio.run_coroutine_threadsafe(_maybe_next(vc), vc.loop))
 
 async def remove_panel():

@@ -80,6 +80,17 @@ def delete_song(song_id):
 def get_path(song_id):
     return os.path.join(MUSIC_CACHE, f"{song_id}.mp3")
 
+def ensure_audio(song):
+    path = get_path(song["song_id"])
+    if os.path.exists(path):
+        return True
+    url = f"https://www.youtube.com/watch?v={song['song_id']}"
+    try:
+        get_song(url, from_url=True)
+    except Exception:
+        return False
+    return os.path.exists(path)
+
 if __name__ == "__main__":
     #print(get_song("There is a reason Suzuki Konomi", from_url=False))
     #print(get_song("https://music.youtube.com/watch?v=1re05dQMhzw", from_url=True))
