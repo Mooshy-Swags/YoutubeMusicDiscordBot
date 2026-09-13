@@ -305,7 +305,7 @@ async def on_songs_flushed(announcements, failures):
             await _announce(announcements, failures)
         if not (vc.is_playing() or vc.is_paused()):
             await start_playback(vc)
-        await refresh_panel()
+        await refresh_panel(force_repost=announced)
         await _render_download()
     except Exception as e:
         print(f"[player] on_songs_flushed error: {e!r}")
