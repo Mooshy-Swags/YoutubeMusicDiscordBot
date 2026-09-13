@@ -179,4 +179,7 @@ async def previous(interaction: discord.Interaction):
     vc.stop()
     await interaction.response.send_message("Going back a song.")
 
-bot.run(TOKEN)
+try:
+    bot.run(TOKEN)
+finally:
+    song_management.save_cache()

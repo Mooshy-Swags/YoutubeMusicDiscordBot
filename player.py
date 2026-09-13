@@ -88,15 +88,19 @@ async def update_progress(vc, interval=2.5):
 
 async def build_queue_embed():
     queue_list = song_management.get_queue()
+    start = song_management.get_queue_start()
     current = song_management.current_song
     played = song_management.songs_played
     lines = []
     for i, song in enumerate(queue_list):
-        marker = "▶ " if i == current else "  "
+        index = start + i
+        marker = "▶ " if index == current else "  "
         name = str(song.get("song_name"))[:60]
         artist = str(song.get("song_artist"))[:40]
-        lines.append(f"{marker}`{played + i + 1}.` **{name}** — {artist}")
-    if len(song_management.songs_queue) > len(queue_list):
+        lines.append(f"{marker}`{played + index + 1}.` **{name}** — {artist}")
+    if start > 0:
+        lines.insert(0, "...")
+    if start + len(queue_list) < len(song_management.songs_queue):
         lines.append("...")
     return discord.Embed(title="Queue", description="\n".join(lines), color=discord.Color.blurple())
 
