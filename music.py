@@ -1,3 +1,4 @@
+import io
 import yt_dlp
 import os
 
@@ -9,7 +10,6 @@ DOWNLOAD_OPTIONS = {
     "outtmpl": os.path.join(MUSIC_CACHE, "%(id)s.%(ext)s"),
     "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "2"}],
     "postprocessor_args": {"FFmpegExtractAudio": ["-map_metadata", "-1"]},
-    "cookies": COOKIES_FILE,
     "noplaylist": True,
     "quiet": False,
     "nooverwrites": True,
@@ -19,7 +19,6 @@ SEARCH_OPTIONS = {
     "quiet": True,
     "extract_flat": True,
     "noplaylist": True,
-    "cookies": COOKIES_FILE,
 }
 
 PLAYLIST_OPTIONS = {
@@ -37,18 +36,39 @@ def _song_dict(info):
     }
 
 def refresh_cookies():
+    global _COOKIE_TEXT
     try:
         from yt_dlp.cookies import extract_cookies_from_browser
         jar = extract_cookies_from_browser("firefox")
-        jar.save(filename=COOKIES_FILE, ignore_discard=True, ignore_expires=True)
+        buf = io.StringIO()
+        jar.save(buf, ignore_discard=True, ignore_expires=True)
+        text = buf.getvalue()
+        with open(COOKIES_FILE, "w", encoding="utf-8") as f:
+            f.write(text)
+        _COOKIE_TEXT = text
     except Exception as exc:
-        if not os.path.exists(COOKIES_FILE):
+        if os.path.exists(COOKIES_FILE):
+            with open(COOKIES_FILE, encoding="utf-8") as f:
+                _COOKIE_TEXT = f.read()
+        else:
+            _COOKIE_TEXT = None
             print(f"[Warning] Could not export Firefox cookies ({exc}); downloads may fail with HTTP 403.")
+
+_COOKIE_TEXT = None
+
+def _options(base):
+    opts = dict(base)
+    opts.pop("cookiefile", None)
+    if _COOKIE_TEXT is not None:
+        # Each YoutubeDL gets its own in-memory stream so yt-dlp's
+        # save-on-close never races on a shared file across concurrent downloads.
+        opts["cookiefile"] = io.StringIO(_COOKIE_TEXT)
+    return opts
 
 def get_song_info(song, from_url=False):
     if not from_url:
         song = search(song)
-    with yt_dlp.YoutubeDL({**DOWNLOAD_OPTIONS, "quiet": True}) as ydl:
+    with yt_dlp.YoutubeDL({**_options(DOWNLOAD_OPTIONS), "quiet": True}) as ydl:
         info = ydl.extract_info(song, download=False)
     url = info.get("webpage_url") or song
     return _song_dict(info), info.get("id"), url
@@ -56,7 +76,7 @@ def get_song_info(song, from_url=False):
 def download_song(song_id, url):
     if os.path.exists(get_path(song_id)):
         return True
-    with yt_dlp.YoutubeDL(DOWNLOAD_OPTIONS) as ydl:
+    with yt_dlp.YoutubeDL(_options(DOWNLOAD_OPTIONS)) as ydl:
         ydl.download([url])
     return os.path.exists(get_path(song_id))
 
@@ -69,7 +89,7 @@ def search(song):
     #search_url = f"https://music.youtube.com/search?q={song}"
     #search_url = f"ytsearch1:{song}"
     search_url = f"https://www.youtube.com/results?search_query={song}"
-    with yt_dlp.YoutubeDL(SEARCH_OPTIONS) as ydl:
+    with yt_dlp.YoutubeDL(_options(SEARCH_OPTIONS)) as ydl:
         results = ydl.extract_info(search_url, download=False)
     for e in results.get("entries", []) or []:
         url = e.get("url") or e.get("webpage_url")
@@ -78,7 +98,7 @@ def search(song):
     return None
     
 def get_playlist_info(playlist_url):
-    with yt_dlp.YoutubeDL({**PLAYLIST_OPTIONS, "quiet": True}) as ydl:
+    with yt_dlp.YoutubeDL({**_options(PLAYLIST_OPTIONS), "quiet": True}) as ydl:
         info = ydl.extract_info(playlist_url, download=False)
     entries = []
     for e in info.get("entries", []):
