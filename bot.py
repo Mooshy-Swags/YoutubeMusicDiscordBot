@@ -1,3 +1,4 @@
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -313,6 +314,17 @@ async def reloadcommands(interaction: discord.Interaction):
         bot.tree.copy_global_to(guild=guild)
         await bot.tree.sync(guild=guild)
     await interaction.followup.send("All commands wiped and re-synced.", ephemeral=True)
+
+@bot.tree.command(name="refreshcookies")
+async def refreshcookies(interaction: discord.Interaction):
+    app = await bot.application_info()
+    if interaction.user.id != app.owner.id:
+        await interaction.response.send_message("Only the bot owner can use this.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    ok = await asyncio.to_thread(music.refresh_cookies, True)
+    result = "Cookies refreshed." if ok else "Couldn't refresh cookies; using previous cookies if available."
+    await interaction.followup.send(result, ephemeral=True)
 
 @bot.tree.command(name="previous")
 async def previous(interaction: discord.Interaction):
