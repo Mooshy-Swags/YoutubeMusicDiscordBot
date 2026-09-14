@@ -12,6 +12,7 @@ seek_next = False
 seek_start = False
 seek_end = False
 seek_target = None
+_force_repost = False
 panel_message = None
 queue_message = None
 download_message = None
@@ -29,6 +30,10 @@ def toggle_loop():
     global loop_mode
     loop_mode = (loop_mode + 1) % 3
     return loop_mode
+
+def request_repost():
+    global _force_repost
+    _force_repost = True
 
 play_started = None
 paused_total = 0.0
@@ -172,9 +177,12 @@ async def start_playback(vc: discord.VoiceClient):
     if song:
         await _play(vc, song)
 
-async def refresh_panel(force_repost=False):
-    global panel_message, queue_message, queue_page
+async def refresh_panel():
+    global panel_message, queue_message, queue_page, _force_repost
     async with refresh_lock:
+        force_repost = _force_repost
+        _force_repost = False
+
         text = build_panel_text()
         if text is None:
             return
@@ -305,7 +313,7 @@ async def on_songs_flushed(announcements, failures):
             await _announce(announcements, failures)
         if not (vc.is_playing() or vc.is_paused()):
             await start_playback(vc)
-        await refresh_panel(force_repost=announced)
+        await refresh_panel()
         await _render_download()
     except Exception as e:
         print(f"[player] on_songs_flushed error: {e!r}")

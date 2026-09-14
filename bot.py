@@ -109,8 +109,10 @@ async def play(interaction: discord.Interaction, query: str):
         await msg.edit(content=f"Found `{name}` by `{artist}`")
 
     if not (vc.is_playing() or vc.is_paused()):
+        player.request_repost()
         await player.start_playback(vc)
     else:
+        player.request_repost()
         await player.refresh_panel()
 
 
@@ -123,6 +125,7 @@ async def queue(interaction: discord.Interaction):
         return
 
     await interaction.response.defer()
+    player.request_repost()
     await player.refresh_panel()
 
 
@@ -135,6 +138,8 @@ async def pause(interaction: discord.Interaction):
     if vc.is_playing():
         vc.pause()
         player.mark_pause()
+        player.request_repost()
+        await player.refresh_panel()
         await interaction.response.send_message("Paused music.")
     else:
         await interaction.response.send_message("Already paused or nothing playing.")
@@ -148,6 +153,8 @@ async def resume(interaction: discord.Interaction):
     if vc.is_paused():
         vc.resume()
         player.mark_resume()
+        player.request_repost()
+        await player.refresh_panel()
         await interaction.response.send_message("Resumed music.")
     else:
         await interaction.response.send_message("Nothing was paused. No music in queue.")
@@ -163,6 +170,7 @@ async def skip(interaction: discord.Interaction):
         return
     if vc.is_paused():
         vc.resume()
+    player.request_repost()
     player.seek_next = True
     vc.stop()
     await interaction.response.send_message("Skipping to next song.")
@@ -176,10 +184,12 @@ async def top(interaction: discord.Interaction):
     if not (vc.is_playing() or vc.is_paused()):
         song_management.go_to_start()
         await interaction.response.send_message("Going to the first song.")
+        player.request_repost()
         await player.start_playback(vc)
         return
     if vc.is_paused():
         vc.resume()
+    player.request_repost()
     player.seek_start = True
     vc.stop()
     await interaction.response.send_message("Going to the first song.")
@@ -193,10 +203,12 @@ async def bottom(interaction: discord.Interaction):
     if not (vc.is_playing() or vc.is_paused()):
         song_management.go_to_end()
         await interaction.response.send_message("Going to the last song.")
+        player.request_repost()
         await player.start_playback(vc)
         return
     if vc.is_paused():
         vc.resume()
+    player.request_repost()
     player.seek_end = True
     vc.stop()
     await interaction.response.send_message("Going to the last song.")
@@ -210,6 +222,8 @@ async def toggleloop(interaction: discord.Interaction):
         message = "Looping playlist."
     else:
         message = "Looping single song."
+    player.request_repost()
+    await player.refresh_panel()
     await interaction.response.send_message(message)
 
 @bot.tree.command(name="skipto")
@@ -229,10 +243,12 @@ async def skipto(interaction: discord.Interaction, number: int):
         return
     if not (vc.is_playing() or vc.is_paused()):
         await interaction.response.send_message(f"Playing song {number}: `{song.get('song_name')}`.")
+        player.request_repost()
         await player.start_playback(vc)
         return
     if vc.is_paused():
         vc.resume()
+    player.request_repost()
     player.seek_target = target
     vc.stop()
     await interaction.response.send_message(f"Skipping to song {number}: `{song.get('song_name')}`.")
@@ -277,6 +293,7 @@ async def removesong(interaction: discord.Interaction, number: int = None, last:
     if was_current and vc is not None and (vc.is_playing() or vc.is_paused()):
         if vc.is_paused():
             vc.resume()
+        player.request_repost()
         player.seek_target = song_management.current_song
         vc.stop()
         label = f"Removed `{removed[0].get('song_name')}`." if len(removed) == 1 else f"Removed {len(removed)} songs."
@@ -286,6 +303,8 @@ async def removesong(interaction: discord.Interaction, number: int = None, last:
             await interaction.response.send_message(f"Removed `{removed[0].get('song_name')}`.")
         else:
             await interaction.response.send_message(f"Removed {len(removed)} songs.")
+        player.request_repost()
+        await player.refresh_panel()
 
 @bot.tree.command(name="removeall")
 async def removeall(interaction: discord.Interaction):
@@ -335,6 +354,7 @@ async def previous(interaction: discord.Interaction):
     if not (vc.is_playing() or vc.is_paused()):
         song_management.move_previous()
         await interaction.response.send_message("Going back to previously played song.")
+        player.request_repost()
         await player.start_playback(vc)
         return
     if song_management.current_song == 0:
@@ -342,6 +362,7 @@ async def previous(interaction: discord.Interaction):
         return
     if vc.is_paused():
         vc.resume()
+    player.request_repost()
     player.seek_previous = True
     vc.stop()
     await interaction.response.send_message("Going back a song.")
